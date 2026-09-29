@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(docker compose *)",
+      "Bash(uv run *)",
+      "Bash(uv sync *)",
+      "Bash(npm run *)",
+      "Bash(npm ci *)",
+      "Bash(ollama list *)",
+      "Bash(ollama ps *)",
+      "Bash(ollama show *)",
+      "Bash(gh pr *)",
+      "Bash(gh run *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/profile/**)",
+      "Read(**/*.eml)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  }
+}

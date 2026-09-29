@@ -1,0 +1,37 @@
+# AI Job Search
+
+Local-only pipeline: IMAP job-alert emails → LangFlow agents (Ollama) → FastAPI/Postgres → React review UI. Applications are drafted automatically and always submitted manually.
+
+- Design and decisions D1–D8, assumptions A1–A6: [docs/architecture.md](docs/architecture.md)
+- Work is split into session-sized plans: [docs/plans/README.md](docs/plans/README.md) (use `/execute-plan`)
+
+## Hard rules
+- **Local LLMs only**, through Ollama. No cloud LLM SDKs or API keys anywhere.
+- **FastAPI is the only owner of the DB schema and blob storage.** LangFlow calls FastAPI tool endpoints and never touches Postgres app tables.
+- **No personal data in git**: CV, templates, emails, `.env`, anything under `DATA_ROOT/profile/`. The repo holds only `*.example.md` stubs.
+- `DATA_ROOT` (default `C:\JobSearchData`) stays **outside OneDrive**.
+- Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `ci:`); one branch per plan, `feat/NN-short-name`.
+- Do not re-decide architecture. If a decision proves wrong, stop, ask the user, then update architecture.md.
+- Stay in scope of the current plan; put discoveries under **Follow-ups** in the plans README.
+
+## Layout
+`backend/` FastAPI (uv) · `frontend/` Vite+React+TS · `langflow/flows` exported flow JSON, `langflow/components` custom components · `infra/` compose, Dockerfiles, `.env.example` · `scripts/` PowerShell helpers · `docs/` · `prompts/`
+
+## How to run
+- Stack: `scripts/dev.ps1 up|down|logs` (created in plan 03)
+- Backend tests: `cd backend; uv run pytest`
+- Frontend tests: `cd frontend; npm test`
+
+## Model roles (all via Ollama)
+| Model | Role |
+|---|---|
+| `qwen2.5:14b` | orchestration, tool calls, extraction, rubric scoring, chat edits |
+| `hf.co/danish-foundation-models/DFM-Mimir-GGUF:Q4_K_M` | document writing (CV, letter, email); 4096 ctx, no reliable tool calls |
+| `bge-m3` | multilingual embeddings |
+
+VRAM is 12 GB: qwen (9.5 GB) and Mimir (4.2 GB) cannot both be resident. Batch work per model and use `keep_alive`.
+
+## Windows notes
+- Shell is PowerShell 5.1: no `&&`/`||`; chain with `;` and check `$?`.
+- Containers reach native Ollama at `http://host.docker.internal:11434`.
+- Files are mounted into Linux containers, so keep LF line endings (`.gitattributes` enforces it).

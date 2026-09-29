@@ -7,7 +7,7 @@ Each plan is sized for **one agent session**. Read [../architecture.md](../archi
 | # | Plan | Depends on | Status |
 |---|---|---|---|
 | 01 | [Claude setup & repo scaffold](01-claude-setup-and-scaffold.md) | – | done |
-| 02 | [CI/CD & release versioning](02-ci-cd-and-releases.md) | 01 | todo |
+| 02 | [CI/CD & release versioning](02-ci-cd-and-releases.md) | 01 | in progress |
 | 03 | [Docker infrastructure](03-docker-infrastructure.md) | 01 | todo |
 | 04 | [Local models setup & evaluation](04-local-models.md) | 03 | todo |
 | 05 | [Database schema & migrations](05-database-schema.md) | 03 | todo |
@@ -33,3 +33,8 @@ Parallelizable after 06: {07, 08, 11}; after 11: {12 (needs 09), 13}.
 
 ## Follow-ups
 _(append here)_
+- (02) Plans 05 and 11 mention an `x-release-please-version` marker. It is not needed: `release-please-config.json` updates `project.version` in `backend/pyproject.toml` and `version` in `frontend/package.json` through toml/json `extra-files`.
+- (02 → 05) CI runs `uv run mypy` with no arguments, so `backend/pyproject.toml` needs `[tool.mypy] files = [...]`. CI provides `DATABASE_URL=postgresql+psycopg://jobsearch:jobsearch@localhost:5432/jobsearch_test` (Postgres 17 service).
+- (02 → 06, 11) The release workflow builds images with the package directory (`backend/`, `frontend/`) as the Docker build context, so Dockerfiles must not reference files outside it.
+- (02 → 14) The release PR is opened with `GITHUB_TOKEN`, so no checks run on it. Either merge it as admin (the ruleset allows admin bypass on PRs only) or add a fine-grained PAT secret `RELEASE_PLEASE_TOKEN`. See `docs/releasing.md`.
+- (02) On this machine git's OpenSSL backend fails TLS to github.com (likely HTTPS interception by antivirus or a proxy). The repo-local git config sets `http.sslBackend=schannel`, and `uvx` needs `--system-certs`.

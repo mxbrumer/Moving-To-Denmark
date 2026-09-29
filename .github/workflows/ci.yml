@@ -1,0 +1,149 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Decides which package jobs run: the package must exist (hashFiles guard)
+  # and have changed. Missing packages skip cleanly until their plan adds them.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend == 'true' && steps.exists.outputs.backend == 'true' }}
+      frontend: ${{ steps.filter.outputs.frontend == 'true' && steps.exists.outputs.frontend == 'true' }}
+      langflow: ${{ steps.filter.outputs.langflow == 'true' && steps.exists.outputs.langflow == 'true' }}
+      infra: ${{ steps.filter.outputs.infra == 'true' && steps.exists.outputs.infra == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: exists
+        run: |
+          echo "backend=${{ hashFiles('backend/pyproject.toml') != '' }}" >> "$GITHUB_OUTPUT"
+          echo "frontend=${{ hashFiles('frontend/package.json') != '' }}" >> "$GITHUB_OUTPUT"
+          echo "langflow=${{ hashFiles('langflow/flows/*.json') != '' }}" >> "$GITHUB_OUTPUT"
+          echo "infra=${{ hashFiles('infra/docker-compose.yml') != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            langflow:
+              - 'langflow/**'
+              - 'scripts/governance_check.py'
+              - '.github/workflows/ci.yml'
+            infra:
+              - 'infra/**'
+              - 'backend/Dockerfile'
+              - 'frontend/Dockerfile'
+              - '.github/workflows/ci.yml'
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: jobsearch
+          POSTGRES_PASSWORD: jobsearch
+          POSTGRES_DB: jobsearch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobsearch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://jobsearch:jobsearch@localhost:5432/jobsearch_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy
+      - run: uv run pytest
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --run
+      - run: npm run build
+
+  langflow:
+    needs: changes
+    if: needs.changes.outputs.langflow == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Flows are valid JSON
+        run: |
+          for f in langflow/flows/*.json; do
+            python3 -m json.tool "$f" > /dev/null || { echo "::error file=$f::invalid JSON"; exit 1; }
+          done
+      - name: Governance check
+        # scripts/governance_check.py arrives in plan 10; no-op until then.
+        if: hashFiles('scripts/governance_check.py') != ''
+        run: python3 scripts/governance_check.py
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Provide .env from example
+        run: |
+          if [ ! -f infra/.env ] && [ -f infra/.env.example ]; then cp infra/.env.example infra/.env; fi
+      - run: docker compose -f infra/docker-compose.yml config -q
+
+  # Single required status check: fails if any job failed, passes if all passed or skipped.
+  ci-passed:
+    if: always()
+    needs: [changes, backend, frontend, langflow, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "One or more CI jobs failed or were cancelled."
+          exit 1
+      - run: echo "All CI jobs passed or were skipped."

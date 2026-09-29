@@ -1,0 +1,83 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      version: ${{ steps.rp.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: rp
+        with:
+          # PRs opened with GITHUB_TOKEN do not trigger CI; a PAT secret fixes that (see docs/releasing.md).
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  images:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - id: image
+        if: hashFiles(format('{0}/Dockerfile', matrix.component)) != ''
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ajs-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+      - if: steps.image.outputs.name != ''
+        uses: docker/setup-buildx-action@v4
+      - if: steps.image.outputs.name != ''
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.image.outputs.name != ''
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.component }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ needs.release-please.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.release-please.outputs.version }}
+
+  flows:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: Attach LangFlow flows to the release
+        if: hashFiles('langflow/flows/*.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          zip -j "langflow-flows-${TAG}.zip" langflow/flows/*.json
+          gh release upload "$TAG" "langflow-flows-${TAG}.zip" --clobber

@@ -24,12 +24,12 @@ One `docker compose` stack for Postgres, Phoenix, LangFlow, backend and frontend
 6. Update CLAUDE.md "How to run" if commands differ.
 
 ## Acceptance criteria
-- [ ] `scripts/dev.ps1 up` → `postgres`, `phoenix`, `langflow` healthy (`docker compose ps`).
-- [ ] LangFlow UI at http://127.0.0.1:7860 logs in with superuser; `langflow` DB contains its tables (`\dt` via `docker compose exec postgres psql`).
-- [ ] Phoenix UI at http://127.0.0.1:6006.
-- [ ] Ollama reachable from the langflow container (step 4).
-- [ ] Nothing written under the OneDrive repo path at runtime.
-- [ ] `docker compose config -q` passes (CI infra job).
+- [x] `scripts/dev.ps1 up` → `postgres`, `phoenix`, `langflow` healthy (`docker compose ps`).
+- [x] LangFlow UI at http://127.0.0.1:7860 logs in with superuser; `langflow` DB contains its tables (`\dt` via `docker compose exec postgres psql`).
+- [x] Phoenix UI at http://127.0.0.1:6006.
+- [x] Ollama reachable from the langflow container (step 4).
+- [x] Nothing written under the OneDrive repo path at runtime.
+- [x] `docker compose config -q` passes (CI infra job).
 
 ## Out of scope
 Backend/frontend code and Dockerfile contents beyond placeholders (06, 11).

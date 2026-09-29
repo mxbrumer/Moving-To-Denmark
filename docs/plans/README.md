@@ -8,7 +8,7 @@ Each plan is sized for **one agent session**. Read [../architecture.md](../archi
 |---|---|---|---|
 | 01 | [Claude setup & repo scaffold](01-claude-setup-and-scaffold.md) | – | done |
 | 02 | [CI/CD & release versioning](02-ci-cd-and-releases.md) | 01 | done |
-| 03 | [Docker infrastructure](03-docker-infrastructure.md) | 01 | todo |
+| 03 | [Docker infrastructure](03-docker-infrastructure.md) | 01 | done |
 | 04 | [Local models setup & evaluation](04-local-models.md) | 03 | todo |
 | 05 | [Database schema & migrations](05-database-schema.md) | 03 | todo |
 | 06 | [FastAPI core & tool endpoints](06-fastapi-core.md) | 05 | todo |
@@ -38,4 +38,9 @@ _(append here)_
 - (02 → 06, 11) The release workflow builds images with the package directory (`backend/`, `frontend/`) as the Docker build context, so Dockerfiles must not reference files outside it.
 - (02 → 14) The release PR is opened with `GITHUB_TOKEN`, so no checks run on it. Either merge it as admin (the ruleset allows admin bypass on PRs only) or add a fine-grained PAT secret `RELEASE_PLEASE_TOKEN`. See `docs/releasing.md`.
 - (02 → 14) With no `v0.0.0` tag, release-please ignores the `0.0.0` manifest entry, so `release-please-config.json` sets `initial-version: 0.1.0`. A release PR titled `chore(main): release 0.1.0` stays open until plan 14; do not merge it earlier.
+- (03 → 07) The backend service mounts only `DATA_ROOT/applications` and `DATA_ROOT/profile` (read-only). Plan 07 writes `DATA_ROOT/inbox/`: add that folder to `scripts/init-data-root.ps1` and a mount to `backend`/`worker`. Also add the `worker` service to the stop list in `dev.ps1 reset-db`.
+- (03 → 06, 14) `dev.ps1 reset-db` drops the LangFlow DB too, so `LANGFLOW_API_KEY` and imported flows are gone afterwards. Recreate the key in the LangFlow UI and re-import flows (plan 14's e2e script must do this).
+- (03 → 08) The LangFlow 1.12.3 image runs Python 3.14; custom components must work on it. Components are mounted read-only and `PYTHONDONTWRITEBYTECODE=1` keeps `.pyc` out of the OneDrive repo.
+- (03 → 10) Phoenix stores SQLite data in `DATA_ROOT/phoenix` (`PHOENIX_WORKING_DIR`); telemetry is off in Phoenix and LangFlow. LangFlow has `PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006`, but trace delivery has not been verified.
+- (03) This machine had an unrelated `langflow` container (`langflowai/langflow:latest`) publishing port 7860. The user agreed to stop it and set its restart policy to `no`. If `dev.ps1 up` fails with "port is already allocated", check `docker ps` for other stacks.
 - (02) On this machine git's OpenSSL backend fails TLS to github.com (likely HTTPS interception by antivirus or a proxy). The repo-local git config sets `http.sslBackend=schannel`, and `uvx` needs `--system-certs`.

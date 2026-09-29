@@ -23,16 +23,17 @@ Source brief: [prompts/project-setup.md](../prompts/project-setup.md). This file
 |---|---|---|
 | `hf.co/danish-foundation-models/DFM-Mimir-GGUF:Q4_K_M` | 4.2 GB, 100% GPU | Arch `hrm_text`, 1.79B params, **4096 ctx**. Danish QA correct. `format=json` extraction correct. ~118 tok/s. **Tool-call test: no tool call emitted** despite `tools` capability. |
 | `qwen2.5:14b` (installed) | 9.5 GB, 100% GPU | Tool-call test: correct `find_application(company, title)` call. |
+| `gemma4:12b` (not yet pulled) | 7.6 GB file per Ollama library; VRAM not measured | **Not yet tested on this machine.** Library lists tools, thinking and vision capabilities and a 256K context. Plan 04 verifies tool calls, Danish extraction, Danish writing and VRAM. |
 
-Implication: both models together (≈13.7 GB) exceed 12 GB VRAM — Ollama evicts one. Pipeline must batch work by model (see D1).
+Windows itself holds about 1.5 GB of VRAM (`nvidia-smi`, 2026-09-28), so roughly 10.7 GB is usable. qwen2.5:14b + Mimir (≈13.7 GB) could not both be resident, which is why the first version of D1 batched work per model. `gemma4:12b` + `bge-m3` (≈8.8 GB before KV cache) are expected to fit together, so the revised D1 needs no model swapping; plan 04 confirms this.
 
-Sources: [DFM-Mimir card](https://huggingface.co/danish-foundation-models/DFM-Mimir), [DFM-Mimir-GGUF](https://huggingface.co/danish-foundation-models/DFM-Mimir-GGUF), [Langflow install](https://docs.langflow.org/get-started-installation), [Langflow Postgres](https://docs.langflow.org/configuration-custom-database), [Langflow + Phoenix](https://docs.langflow.org/integrations-arize), [Langflow Ollama](https://docs.langflow.org/bundles-ollama).
+Sources: [Gemma 4 on Ollama](https://ollama.com/library/gemma4), [DFM-Mimir card](https://huggingface.co/danish-foundation-models/DFM-Mimir), [DFM-Mimir-GGUF](https://huggingface.co/danish-foundation-models/DFM-Mimir-GGUF), [Langflow install](https://docs.langflow.org/get-started-installation), [Langflow Postgres](https://docs.langflow.org/configuration-custom-database), [Langflow + Phoenix](https://docs.langflow.org/integrations-arize), [Langflow Ollama](https://docs.langflow.org/bundles-ollama).
 
 ## 2. Decisions (confirmed with user)
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | **Hybrid local LLMs.** `qwen2.5:14b` = orchestration, parsing, tool calls, extraction, rubric scoring, chat edits. **DFM-Mimir** = document writing (CV, cover letter, recruiter email) in fixed, non-agent flow steps. `bge-m3` (Ollama) = multilingual embeddings. All via Ollama; no cloud LLMs. | Mimir can't tool-call reliably and has 4k ctx; strongest DA/EN writer. |
+| D1 | **Single local LLM (revised 2026-09-28).** `gemma4:12b` = all LLM roles: orchestration, parsing, tool calls, extraction, rubric scoring, document writing (CV, cover letter, recruiter email) and chat edits. Document writing stays in fixed, non-agent flow steps. `bge-m3` (Ollama) = multilingual embeddings. All via Ollama; no cloud LLMs. The app reads the agent model and the writer model from two separate settings, so a different writer can be swapped in by config. **DFM-Mimir** is kept only as the Danish-writing baseline in plan 04's benchmark. | Chosen by the user on 2026-09-28, replacing the earlier hybrid (`qwen2.5:14b` for agents + DFM-Mimir for writing; the original brief named Mimir as primary). Gemma 4 12B fits in 12 GB next to bge-m3, so there is no model swapping. It has native tool calls, and its long context removes Mimir's 4k budget limits. If plan 04 shows Mimir clearly writes better Danish, or Gemma fails tool calls, stop and ask the user before changing D1 again. |
 | D2 | **LangFlow in Docker Compose**, image `langflowai/langflow` pinned to `1.12.x`. Ollama stays **native on Windows** (GPU); containers reach it at `http://host.docker.internal:11434`. | Reproducible, versioned. |
 | D3 | **Email intake via IMAP polling** (app password). | Provider-agnostic. |
 | D4 | **Posting text: mixed.** Use email body if it contains a full description; else fetch URL; else mark `needs_manual_text` for user paste. LinkedIn pages are not scraped. | Emails vary. |
@@ -44,7 +45,7 @@ Sources: [DFM-Mimir card](https://huggingface.co/danish-foundation-models/DFM-Mi
 ## 3. Assumptions (not asked; change if wrong)
 - A1 Single local user; frontend/API bound to localhost; no auth beyond a shared API key between services.
 - A2 Generated documents use the **posting's language** (Danish or English). Other languages → status `unsupported_language`, stop.
-- A3 Frontend chat editing also uses local models (qwen2.5:14b), consistent with "LLM calls must be local".
+- A3 Frontend chat editing also uses local models (`gemma4:12b`), consistent with "LLM calls must be local".
 - A4 Application submission is always manual (user opens link from the Queue tab).
 - A5 Duplicate = same `source_url`/source job id, OR pg_trgm similarity ≥ 0.85 on normalized company + title within 120 days (configurable).
 - A6 User inputs (CV, cover letter template, recruiter email template) are converted to Markdown and kept in `DATA_ROOT/profile/`, never committed. Repo holds only `*.example.md` stubs.
@@ -70,24 +71,24 @@ React UI ──► FastAPI ◄── Phoenix (traces from LangFlow + FastAPI, OT
 | Step | Owner | Model |
 |---|---|---|
 | 1 Receive email | FastAPI IMAP poller; stores `email_message` by Message-ID (idempotent) | – |
-| 2 Split into jobs | LangFlow **Intake agent** → JSON list of jobs (title, company, url, snippet) | qwen |
+| 2 Split into jobs | LangFlow **Intake agent** → JSON list of jobs (title, company, url, snippet) | gemma |
 | 3–4 Dedup, stop if exists | FastAPI `POST /tools/applications/find` (A5), called per job | – |
 | 5 Insert row | `POST /tools/applications` → `fact_application` status `new` (upserts `dim_company`) | – |
 | (D4) Get full text | FastAPI fetcher (httpx + trafilatura) | – |
-| 6 Language | **Analyst agent** (+ cheap `lingua`/langdetect pre-check) | qwen |
-| 7 Recruiter contact | Analyst agent, JSON output; regex pre-extract emails/phones | qwen |
-| 8 Keywords/requirements | Analyst agent → `job_brief` JSON (≤ 600 tokens) | qwen |
-| 9 Similarity score | **Matcher agent**: bge-m3 cosine (CV sections vs brief) + rubric (D8) | bge-m3, qwen |
+| 6 Language | **Analyst agent** (+ cheap `lingua`/langdetect pre-check) | gemma |
+| 7 Recruiter contact | Analyst agent, JSON output; regex pre-extract emails/phones | gemma |
+| 8 Keywords/requirements | Analyst agent → `job_brief` JSON (≤ 600 tokens) | gemma |
+| 9 Similarity score | **Matcher agent**: bge-m3 cosine (CV sections vs brief) + rubric (D8) | bge-m3, gemma |
 | 10 Stop if weak | status `low_match` (terminal) | – |
 | 11 Create folder | `POST /tools/applications/{id}/folder` → `DATA_ROOT/applications/<yyyy-mm>_<company>_<title>_<id>/` | – |
-| 12 Tailored CV | **CV Writer**: section-by-section rewrite to fit 4k ctx | Mimir |
-| 13 Cover letter | **Letter Writer**: brief + top CV evidence + template | Mimir |
-| 14 Recruiter email | **Email Writer** (only if contact found, else generic) | Mimir |
+| 12 Tailored CV | **CV Writer**: whole-CV rewrite in one call if it fits the writer budget, else section by section | gemma |
+| 13 Cover letter | **Letter Writer**: brief + top CV evidence + template | gemma |
+| 14 Recruiter email | **Email Writer** (only if contact found, else generic) | gemma |
 | 15 Save artifacts | `POST /tools/applications/{id}/artifacts` → `.md` + rendered `.pdf`; status `generated` | – |
 
-VRAM batching: the worker runs steps 2–10 for all new jobs (qwen phase), then 12–14 for all matches (Mimir phase), using Ollama `keep_alive` to avoid swapping per job.
+Run order: the worker runs steps 2–10 for all new jobs (analysis phase), then 12–14 for all matches (generation phase). With one LLM this is no longer needed to avoid model swaps; it is kept so a batch of emails is triaged before the slower writing starts. `gemma4:12b` and `bge-m3` stay resident with a long `keep_alive`. Every caller uses the same `num_ctx`, because a different value makes Ollama reload the model.
 
-Mimir 4k context budget per call: system+instructions ≤ 600, job brief ≤ 600, CV evidence ≤ 1200, template/section ≤ 600, output ≤ 1000 tokens.
+Writer context budget per call, assuming `num_ctx` 16384 (plan 04 sets the final value and may scale these): system+instructions ≤ 1000, job brief ≤ 1000, CV evidence ≤ 4000, template/section ≤ 1500, output ≤ 2000 tokens. The rest is headroom.
 
 ## 6. Application status lifecycle
 `new → analyzed → low_match` (terminal) | `→ matched → generating → generated → approved (queued) → submitted | declined`; `skip` only reorders the queue. Side statuses: `duplicate`, `needs_manual_text`, `unsupported_language`, `error`. Every change is written to `application_event`.

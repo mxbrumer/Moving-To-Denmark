@@ -21,8 +21,9 @@ Poll IMAP for job-alert emails (D3), store them idempotently, get full posting t
    - failure/short result → status `needs_manual_text` (UI lets user paste; plan 12 adds field).
    Unwrap tracking redirect links (e.g. Jobindex click URLs) before dedup so `source_url` is canonical.
 6. **Pipeline orchestrator** `worker/pipeline.py` (the loop from architecture §5):
-   - Phase A (qwen): for each new email → Intake flow → for each job: `find` → stop if exists → create row → fetch text → Analysis+Match flow (plan 08).
-   - Phase B (Mimir): for each `matched` → Generation flow (plan 09).
+   - Phase A (analysis): for each new email → Intake flow → for each job: `find` → stop if exists → create row → fetch text → Analysis+Match flow (plan 08).
+   - Phase B (generation): for each `matched` → Generation flow (plan 09).
+   - Both phases use the same model (D1), so there is no model swap between them. The order is kept so a whole batch is triaged before the slower writing starts.
    - Each job isolated in try/except → `error` status with message; retries only on transient errors (max 2).
    - Until 08/09 exist, flows are called through an interface that tests can stub.
 7. Sample fixtures: 3 anonymized `.eml` files (DA, EN, links-only) in `backend/tests/fixtures/` — synthetic content only.

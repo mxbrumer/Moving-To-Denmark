@@ -14,8 +14,8 @@ Fetch the docs rather than relying on memory; component names and fields change 
 
 ## Conventions
 - Flows are exported to `langflow/flows/<name>.json`; custom components live in `langflow/components/*.py`.
-- Models come only from Ollama at `http://host.docker.internal:11434`. `qwen2.5:14b` for agents, tool calls, extraction and scoring; DFM-Mimir only in fixed, non-agent steps that write documents; `bge-m3` for embeddings.
+- Models come only from Ollama at `http://host.docker.internal:11434`. `gemma4:12b` (alias `ajs-gemma`) for every LLM role: agents, tool calls, extraction, scoring, and the fixed, non-agent steps that write documents. `bge-m3` for embeddings. Read model names from the `LLM_AGENT_MODEL` / `LLM_WRITER_MODEL` global variables, never hard-code them.
 - LangFlow never touches Postgres app tables. It calls FastAPI tool endpoints (`/tools/...`) with the shared API key.
 - One flow run per job so runs are idempotent and retryable.
-- Keep every Mimir call within its 4k context budget (see architecture §5).
+- Keep every writer call within the context budgets in architecture §5, and never override `num_ctx` per node (a different value reloads the model).
 - No secrets or personal data in exported JSON; check the diff before committing.

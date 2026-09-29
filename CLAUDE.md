@@ -25,11 +25,12 @@ Local-only pipeline: IMAP job-alert emails → LangFlow agents (Ollama) → Fast
 ## Model roles (all via Ollama)
 | Model | Role |
 |---|---|
-| `qwen2.5:14b` | orchestration, tool calls, extraction, rubric scoring, chat edits |
-| `hf.co/danish-foundation-models/DFM-Mimir-GGUF:Q4_K_M` | document writing (CV, letter, email); 4096 ctx, no reliable tool calls |
+| `gemma4:12b` (app alias `ajs-gemma`) | every LLM role: orchestration, tool calls, extraction, rubric scoring, document writing, chat edits |
 | `bge-m3` | multilingual embeddings |
 
-VRAM is 12 GB: qwen (9.5 GB) and Mimir (4.2 GB) cannot both be resident. Batch work per model and use `keep_alive`.
+Agent and writer model names are separate config values (`LLM_AGENT_MODEL`, `LLM_WRITER_MODEL`), never hard-coded. DFM-Mimir and qwen2.5:14b are benchmark baselines only (plan 04).
+
+VRAM is 12 GB, about 10.7 GB usable. Gemma (7.6 GB file) and bge-m3 should stay resident together; plan 04 verifies this and sets `num_ctx`. Use one `num_ctx` everywhere, since a different value reloads the model.
 
 ## Windows notes
 - Shell is PowerShell 5.1: no `&&`/`||`; chain with `;` and check `$?`.

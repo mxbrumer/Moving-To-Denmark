@@ -11,7 +11,7 @@ One SemVer for the whole repo (D7), driven by [release-please](https://github.co
    - attaches `langflow-flows-vX.Y.Z.zip` (all `langflow/flows/*.json`).
 
 ## Version bumps (pre-1.0)
-`feat` → minor (0.1.0 → 0.2.0), `fix`/`perf`/`docs` → patch, `feat!` or `BREAKING CHANGE:` → minor while < 1.0. Only `feat`/`fix`/`perf`/`docs` appear in `CHANGELOG.md`; `chore`, `ci`, `test`, `refactor` and `build` are hidden. Config: `release-please-config.json`. The version is stamped into `.release-please-manifest.json`, `backend/pyproject.toml` and `frontend/package.json` (once they exist).
+`feat` → minor (0.1.0 → 0.2.0), `fix`/`perf`/`docs` → patch, `feat!` or `BREAKING CHANGE:` → minor while < 1.0. Only `feat`/`fix`/`perf`/`docs` appear in `CHANGELOG.md`; `chore`, `ci`, `test`, `refactor` and `build` are hidden. Config: `release-please-config.json`. The version is stamped into `.release-please-manifest.json`, `version.txt`, `backend/pyproject.toml` and `frontend/package.json` (once they exist).
 
 ## Release PR checks
 Workflows do not run on PRs opened with the default `GITHUB_TOKEN`, so the release PR shows no checks. Either:

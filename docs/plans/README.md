@@ -7,7 +7,7 @@ Each plan is sized for **one agent session**. Read [../architecture.md](../archi
 | # | Plan | Depends on | Status |
 |---|---|---|---|
 | 01 | [Claude setup & repo scaffold](01-claude-setup-and-scaffold.md) | – | done |
-| 02 | [CI/CD & release versioning](02-ci-cd-and-releases.md) | 01 | in progress |
+| 02 | [CI/CD & release versioning](02-ci-cd-and-releases.md) | 01 | done |
 | 03 | [Docker infrastructure](03-docker-infrastructure.md) | 01 | todo |
 | 04 | [Local models setup & evaluation](04-local-models.md) | 03 | todo |
 | 05 | [Database schema & migrations](05-database-schema.md) | 03 | todo |
@@ -37,4 +37,5 @@ _(append here)_
 - (02 → 05) CI runs `uv run mypy` with no arguments, so `backend/pyproject.toml` needs `[tool.mypy] files = [...]`. CI provides `DATABASE_URL=postgresql+psycopg://jobsearch:jobsearch@localhost:5432/jobsearch_test` (Postgres 17 service).
 - (02 → 06, 11) The release workflow builds images with the package directory (`backend/`, `frontend/`) as the Docker build context, so Dockerfiles must not reference files outside it.
 - (02 → 14) The release PR is opened with `GITHUB_TOKEN`, so no checks run on it. Either merge it as admin (the ruleset allows admin bypass on PRs only) or add a fine-grained PAT secret `RELEASE_PLEASE_TOKEN`. See `docs/releasing.md`.
+- (02 → 14) With no `v0.0.0` tag, release-please ignores the `0.0.0` manifest entry, so `release-please-config.json` sets `initial-version: 0.1.0`. A release PR titled `chore(main): release 0.1.0` stays open until plan 14; do not merge it earlier.
 - (02) On this machine git's OpenSSL backend fails TLS to github.com (likely HTTPS interception by antivirus or a proxy). The repo-local git config sets `http.sslBackend=schannel`, and `uvx` needs `--system-certs`.
